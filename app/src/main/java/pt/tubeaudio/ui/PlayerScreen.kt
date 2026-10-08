@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -243,6 +245,7 @@ private fun SearchContent(state: PlayerState, vm: PlayerViewModel, onAdd: (Audio
 @Composable
 private fun ErrorCard(message: String, details: String?, retry: () -> Unit) {
     var showDetails by remember(message, details) { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
     Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)
         .clip(RoundedCornerShape(18.dp)).background(Color(0xFF342430)).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -260,6 +263,13 @@ private fun ErrorCard(message: String, details: String?, retry: () -> Unit) {
         }
         if (showDetails) Text(details.orEmpty(), color = muted,
             style = MaterialTheme.typography.bodySmall)
+        if (showDetails && !details.isNullOrBlank()) TextButton(onClick = {
+            clipboard.setText(AnnotatedString(details))
+        }) {
+            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = mint)
+            Spacer(Modifier.width(6.dp))
+            Text("Copiar erro", color = mint)
+        }
     }
 }
 

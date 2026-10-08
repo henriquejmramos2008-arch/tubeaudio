@@ -120,7 +120,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 Log.e("TubeAudioSearch", "Falha na pesquisa", it)
                 _state.value = _state.value.copy(loading = false,
                     error = searchMessage(it),
-                    errorDetails = "${it.javaClass.simpleName}: ${it.message.orEmpty().take(200)}")
+                    errorDetails = diagnosticDetails(it))
             }
         }
     }
@@ -183,7 +183,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 Log.e("TubeAudioPlayer", "Falha ao resolver áudio", it)
                 _state.value = _state.value.copy(resolving = false,
                     error = "Não foi possível reproduzir esta faixa.",
-                    errorDetails = "${it.javaClass.simpleName}: ${it.message.orEmpty().take(200)}")
+                    errorDetails = diagnosticDetails(it))
             }
         }
     }
@@ -221,16 +221,22 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun seekTo(positionMs: Long) = playback.seekTo(positionMs)
 
     private fun searchMessage(error: Throwable): String {
-        val name = error.javaClass.simpleName
+        val causes = generateSequence(error) { it.cause }.take(5).toList()
+        val names = causes.joinToString(" ") { it.javaClass.simpleName }
         return when {
-            name.contains("ReCaptcha", true) -> "O YouTube pediu uma verificação. Tenta novamente mais tarde."
-            error is java.net.UnknownHostException -> "Sem acesso à Internet. Verifica a ligação."
-            error is java.net.SocketTimeoutException -> "A pesquisa demorou demasiado. Tenta novamente."
-            name.contains("Extraction", true) || name.contains("Parsing", true) ->
-                "O YouTube alterou a pesquisa. Pode ser necessária uma atualização."
+            names.contains("ReCaptcha", true) -> "O YouTube pediu uma verificação. Tenta novamente mais tarde."
+            causes.any { it is java.net.UnknownHostException } -> "Sem acesso à Internet. Verifica a ligação."
+            causes.any { it is java.net.SocketTimeoutException } -> "A pesquisa demorou demasiado. Tenta novamente."
+            names.contains("Extraction", true) || names.contains("Parsing", true) ->
+                "A pesquisa foi recusada ou mudou. Abre os detalhes para vermos a causa."
             else -> "Não foi possível pesquisar agora. Tenta novamente."
         }
     }
+
+    private fun diagnosticDetails(error: Throwable): String =
+        generateSequence(error) { it.cause }.take(5).joinToString("\nCausado por ") {
+            "${it.javaClass.simpleName}: ${it.message.orEmpty().take(300)}"
+        }
 
     override fun onCleared() {
         searchJob?.cancel()

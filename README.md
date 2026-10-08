@@ -32,7 +32,7 @@ mesmo identificador e uma assinatura diferente, é preciso desinstalá-la antes
 - Início com acesso rápido, pesquisa, biblioteca, miniplayer e player com posição.
 - Fila a partir dos resultados e das playlists, próximo/anterior, aleatório e repetir uma faixa.
 - Download para armazenamento privado, notificação de progresso e reprodução do ficheiro sem rede.
-- Erros de pesquisa com repetição e detalhes técnicos para diagnóstico.
+- Erros de pesquisa com repetição, cadeia de causas e botão para copiar os detalhes técnicos.
 - OAuth e sincronização de conta ainda por reconstruir.
 
 A disponibilidade do áudio depende do extrator e da origem. O fluxo real de
