@@ -1,0 +1,2 @@
+-keep class org.schabi.newpipe.extractor.** { *; }
+-keepattributes *Annotation*,InnerClasses,EnclosingMethod
