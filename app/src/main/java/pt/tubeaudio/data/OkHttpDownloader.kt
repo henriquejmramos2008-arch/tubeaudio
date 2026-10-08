@@ -24,7 +24,8 @@ class OkHttpDownloader : Downloader() {
         builder.header("User-Agent", request.headers()["User-Agent"]?.firstOrNull()
             ?: "Mozilla/5.0 (Android) AppleWebKit/537.36 Chrome/140 Mobile Safari/537.36")
         client.newCall(builder.build()).execute().use {
-            return Response(it.code, it.message, it.headers.toMultimap(), it.body.string())
+            return Response(it.code, it.message, it.headers.toMultimap(),
+                it.body.string(), it.request.url.toString())
         }
     }
 }

@@ -14,7 +14,7 @@ class YoutubeRepository {
     suspend fun search(query: String): Result<List<AudioTrack>> = withContext(Dispatchers.IO) {
         runCatching {
             require(query.isNotBlank())
-            SearchInfo.getInfo(youtube, query.trim()).relatedItems
+            SearchInfo.getInfo(youtube, youtube.searchQHFactory.fromQuery(query.trim())).relatedItems
                 .filterIsInstance<StreamInfoItem>()
                 .map {
                     AudioTrack(
@@ -29,15 +29,15 @@ class YoutubeRepository {
         runCatching {
             val info = StreamInfo.getInfo(youtube, track.id)
             val stream = info.audioStreams
-                .filter { it.url.isNotBlank() }
+                .filter { !it.url.isNullOrBlank() }
                 .maxByOrNull { it.bitrate }
                 ?: error("Nenhum stream de áudio disponível")
             track.copy(
                 title = info.name,
                 uploader = info.uploaderName,
-                durationSeconds = info.length,
+                durationSeconds = info.duration,
                 thumbnailUrl = info.thumbnails.firstOrNull()?.url ?: track.thumbnailUrl,
-                streamUrl = stream.url
+                streamUrl = stream.url ?: error("URL de áudio em falta")
             )
         }
     }
