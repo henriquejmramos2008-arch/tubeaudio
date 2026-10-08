@@ -27,7 +27,8 @@ Se a app anterior tiver outro identificador ou assinatura, instala-se em paralel
 - Pesquisa e resolução de áudio com NewPipeExtractor.
 - MediaSessionService e MediaController para reprodução em segundo plano.
 - Favoritos e 100 faixas recentes no armazenamento local.
-- Pesquisa, favoritos, histórico, miniplayer e player com posição.
+- Início com acesso rápido, pesquisa, biblioteca, miniplayer e player com posição.
+- Erros de pesquisa com repetição e detalhes técnicos para diagnóstico.
 - Playlists, downloads offline e OAuth ainda por reconstruir.
 
 A disponibilidade do áudio depende do extrator e da origem. O fluxo real de
