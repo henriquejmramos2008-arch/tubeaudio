@@ -9,11 +9,11 @@ val newpipeExtractorVersion: String by project
 
 android {
     namespace = "pt.tubeaudio"
-    compileSdk = 37
+    compileSdk = 36
     defaultConfig {
         applicationId = "pt.tubeaudio"
         minSdk = 26
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 11
         versionName = "0.9.0"
     }
@@ -33,19 +33,19 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.18.0")
-    implementation("androidx.activity:activity-compose:1.13.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
-    implementation(platform("androidx.compose:compose-bom:2026.08.00"))
+    implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.activity:activity-compose:1.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
+    implementation(platform("androidx.compose:compose-bom:2025.10.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("androidx.media3:media3-exoplayer:1.11.0")
-    implementation("androidx.media3:media3-session:1.11.0")
+    implementation("androidx.media3:media3-exoplayer:1.8.0")
+    implementation("androidx.media3:media3-session:1.8.0")
     implementation("org.schabi.newpipe:extractor:$newpipeExtractorVersion")
     implementation("com.squareup.okhttp3:okhttp:5.1.0")
     implementation("io.coil-kt.coil3:coil-compose:3.3.0")

@@ -12,7 +12,7 @@ ao fecho da aplicação; os URLs temporários de áudio são obtidos novamente a
 
 ## Compilar
 
-Requisitos: JDK 17, Android SDK 37, Gradle 9.5+ e ligação à Internet para obter dependências.
+Requisitos: JDK 17, Android SDK 36, Gradle 9.5+ e ligação à Internet para obter dependências.
 
 ```sh
 gradle :app:assembleDebug
