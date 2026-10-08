@@ -5,9 +5,9 @@ Aplicação Android para pesquisar vídeos do YouTube e reproduzir o respetivo �
 ## Recuperação do projeto
 
 Esta base foi reconstruída a partir de um ZIP inicial de 2 de setembro de 2026. O código
-da versão anterior com playlists, downloads e sincronização de conta não estava no
+da versão anterior com downloads e sincronização de conta não estava no
 repositório. Esta entrega recupera pesquisa, reprodução em segundo plano, controlos
-de pausa e posição, favoritos e histórico locais. Os favoritos e o histórico sobrevivem
+de pausa e posição, favoritos, histórico e playlists locais. A biblioteca sobrevive
 ao fecho da aplicação; os URLs temporários de áudio são obtidos novamente ao tocar.
 
 ## Compilar
@@ -20,16 +20,18 @@ gradle :app:assembleDebug
 
 O APK de debug fica em `app/build/outputs/apk/debug/app-debug.apk`. O workflow
 `Android debug build` disponibiliza o APK como artefacto de cada execução bem sucedida.
-Se a app anterior tiver outro identificador ou assinatura, instala-se em paralelo.
+Se a app anterior tiver outro identificador, instala-se em paralelo. Se tiver o
+mesmo identificador e uma assinatura diferente, é preciso desinstalá-la antes
+(o que apaga os dados locais dessa instalação).
 
 ## Estado
 
 - Pesquisa e resolução de áudio com NewPipeExtractor.
 - MediaSessionService e MediaController para reprodução em segundo plano.
-- Favoritos e 100 faixas recentes no armazenamento local.
+- Favoritos, playlists e 100 faixas recentes no armazenamento local.
 - Início com acesso rápido, pesquisa, biblioteca, miniplayer e player com posição.
 - Erros de pesquisa com repetição e detalhes técnicos para diagnóstico.
-- Playlists, downloads offline e OAuth ainda por reconstruir.
+- Downloads offline, OAuth e reprodução sequencial de playlists ainda por reconstruir.
 
 A disponibilidade do áudio depende do extrator e da origem. O fluxo real de
 reprodução e os controlos por Bluetooth precisam de validação num dispositivo.

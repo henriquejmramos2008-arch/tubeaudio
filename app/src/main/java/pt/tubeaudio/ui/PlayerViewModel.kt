@@ -11,12 +11,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import pt.tubeaudio.data.LibraryStore
+import pt.tubeaudio.data.LocalPlaylist
 import pt.tubeaudio.data.YoutubeRepository
 import pt.tubeaudio.model.AudioTrack
 import pt.tubeaudio.playback.PlaybackController
 
 enum class LibraryTab { HOME, SEARCH, LIBRARY }
-enum class LibrarySection { FAVORITES, HISTORY }
+enum class LibrarySection { PLAYLISTS, FAVORITES, HISTORY }
 
 data class PlayerState(
     val query: String = "",
@@ -25,6 +26,7 @@ data class PlayerState(
     val results: List<AudioTrack> = emptyList(),
     val favorites: List<AudioTrack> = emptyList(),
     val history: List<AudioTrack> = emptyList(),
+    val playlists: List<LocalPlaylist> = emptyList(),
     val current: AudioTrack? = null,
     val tab: LibraryTab = LibraryTab.HOME,
     val librarySection: LibrarySection = LibrarySection.FAVORITES,
@@ -38,7 +40,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val library = LibraryStore(application)
     private val playback = PlaybackController(application)
     private val _state = MutableStateFlow(
-        PlayerState(favorites = library.favorites(), history = library.history())
+        PlayerState(favorites = library.favorites(), history = library.history(),
+            playlists = library.playlists())
     )
     val state = _state.asStateFlow()
     private var searchJob: Job? = null
@@ -107,6 +110,18 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun toggleFavorite(track: AudioTrack) {
         _state.value = _state.value.copy(favorites = library.toggleFavorite(track))
+    }
+    fun createPlaylist(name: String) {
+        _state.value = _state.value.copy(playlists = library.createPlaylist(name))
+    }
+    fun deletePlaylist(id: String) {
+        _state.value = _state.value.copy(playlists = library.deletePlaylist(id))
+    }
+    fun addToPlaylist(id: String, track: AudioTrack) {
+        _state.value = _state.value.copy(playlists = library.addToPlaylist(id, track))
+    }
+    fun removeFromPlaylist(id: String, trackId: String) {
+        _state.value = _state.value.copy(playlists = library.removeFromPlaylist(id, trackId))
     }
     fun togglePlayback() = playback.toggle()
     fun seekTo(positionMs: Long) = playback.seekTo(positionMs)

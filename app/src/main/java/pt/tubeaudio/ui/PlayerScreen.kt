@@ -39,6 +39,7 @@ private val mint = Color(0xFF8AE9CA)
 fun PlayerScreen(vm: PlayerViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
     var expandedPlayer by rememberSaveable { mutableStateOf(false) }
+    var addingTrack by remember { mutableStateOf<AudioTrack?>(null) }
     Scaffold(
         containerColor = ink,
         contentColor = Color.White,
@@ -69,9 +70,9 @@ fun PlayerScreen(vm: PlayerViewModel) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
             when (state.tab) {
-                LibraryTab.HOME -> HomeContent(state, vm)
-                LibraryTab.SEARCH -> SearchContent(state, vm)
-                LibraryTab.LIBRARY -> LibraryContent(state, vm)
+                LibraryTab.HOME -> HomeContent(state, vm) { addingTrack = it }
+                LibraryTab.SEARCH -> SearchContent(state, vm) { addingTrack = it }
+                LibraryTab.LIBRARY -> LibraryContent(state, vm) { addingTrack = it }
             }
         }
     }
@@ -80,7 +81,10 @@ fun PlayerScreen(vm: PlayerViewModel) {
             onDismissRequest = { expandedPlayer = false },
             containerColor = Color(0xFF171D2D),
             contentColor = Color.White
-        ) { PlayerDetails(track, state, vm) }
+        ) { PlayerDetails(track, state, vm) { addingTrack = it } }
+    }
+    addingTrack?.let { track ->
+        PlaylistPicker(track, state, vm, onDismiss = { addingTrack = null })
     }
 }
 
@@ -104,7 +108,7 @@ private fun Header(title: String, subtitle: String) {
 }
 
 @Composable
-private fun HomeContent(state: PlayerState, vm: PlayerViewModel) {
+private fun HomeContent(state: PlayerState, vm: PlayerViewModel, onAdd: (AudioTrack) -> Unit) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 20.dp)) {
         item {
@@ -133,12 +137,17 @@ private fun HomeContent(state: PlayerState, vm: PlayerViewModel) {
             item { SectionTitle("Ouvir novamente", "As tuas últimas faixas") }
             items(state.history.take(6), key = { "home-${it.id}" }) { track ->
                 TrackRow(track, state.favorites.any { it.id == track.id },
-                    onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) })
+                    onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) },
+                    onAdd = { onAdd(track) })
             }
         }
         item {
             SectionTitle("A tua biblioteca", "Acesso rápido")
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShortcutCard("Playlists", "${state.playlists.size}", Icons.Default.QueueMusic,
+                    Modifier.weight(1f)) {
+                    vm.select(LibraryTab.LIBRARY); vm.selectLibrary(LibrarySection.PLAYLISTS)
+                }
                 ShortcutCard("Favoritos", "${state.favorites.size} músicas", Icons.Default.Favorite,
                     Modifier.weight(1f)) {
                     vm.select(LibraryTab.LIBRARY); vm.selectLibrary(LibrarySection.FAVORITES)
@@ -175,7 +184,7 @@ private fun ShortcutCard(title: String, subtitle: String,
 }
 
 @Composable
-private fun SearchContent(state: PlayerState, vm: PlayerViewModel) {
+private fun SearchContent(state: PlayerState, vm: PlayerViewModel, onAdd: (AudioTrack) -> Unit) {
     val keyboard = LocalSoftwareKeyboardController.current
     Header("Pesquisar", "Músicas, artistas e vídeos num só lugar.")
     OutlinedTextField(
@@ -216,7 +225,8 @@ private fun SearchContent(state: PlayerState, vm: PlayerViewModel) {
             contentPadding = PaddingValues(bottom = 20.dp)) {
             items(state.results, key = { it.id }) { track ->
                 TrackRow(track, state.favorites.any { it.id == track.id },
-                    onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) })
+                    onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) },
+                    onAdd = { onAdd(track) })
             }
         }
     }
@@ -245,41 +255,124 @@ private fun ErrorCard(message: String, details: String?, retry: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LibraryContent(state: PlayerState, vm: PlayerViewModel) {
-    Header("Biblioteca", "O que guardaste e ouviste.")
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        listOf(LibrarySection.FAVORITES, LibrarySection.HISTORY).forEachIndexed { index, section ->
-            SegmentedButton(
-                selected = state.librarySection == section,
-                onClick = { vm.selectLibrary(section) },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
-                label = { Text(if (section == LibrarySection.FAVORITES) "Favoritos" else "Recentes") },
-                icon = { Icon(if (section == LibrarySection.FAVORITES)
-                    Icons.Default.Favorite else Icons.Default.History, contentDescription = null,
-                    modifier = Modifier.size(18.dp)) })
-        }
+private fun LibraryContent(state: PlayerState, vm: PlayerViewModel, onAdd: (AudioTrack) -> Unit) {
+    var selectedPlaylist by rememberSaveable { mutableStateOf<String?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    var confirmingDelete by remember { mutableStateOf(false) }
+    LaunchedEffect(selectedPlaylist, state.playlists) {
+        if (selectedPlaylist != null && state.playlists.none { it.id == selectedPlaylist })
+            selectedPlaylist = null
     }
-    Spacer(Modifier.height(20.dp))
-    val tracks = if (state.librarySection == LibrarySection.FAVORITES)
-        state.favorites else state.history
-    if (tracks.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(if (state.librarySection == LibrarySection.FAVORITES)
-                "Guarda músicas com o coração para as encontrares aqui."
-                else "As músicas que ouvires aparecem aqui.",
-                color = muted)
-        }
-    } else {
-        Text("${tracks.size} MÚSICAS", style = MaterialTheme.typography.labelMedium, color = muted)
-        Spacer(Modifier.height(12.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(bottom = 20.dp)) {
-            items(tracks, key = { it.id }) { track ->
-                TrackRow(track, state.favorites.any { it.id == track.id },
-                    onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) })
+    Header("Biblioteca", "Músicas e coleções guardadas no telemóvel.")
+    if (selectedPlaylist == null) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            LibrarySection.entries.forEachIndexed { index, section ->
+                SegmentedButton(
+                    selected = state.librarySection == section,
+                    onClick = { vm.selectLibrary(section) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = 3),
+                    label = { Text(when (section) {
+                        LibrarySection.PLAYLISTS -> "Playlists"
+                        LibrarySection.FAVORITES -> "Favoritos"
+                        LibrarySection.HISTORY -> "Recentes"
+                    }) })
             }
         }
+        Spacer(Modifier.height(20.dp))
+    }
+    if (state.librarySection == LibrarySection.PLAYLISTS) {
+        val playlist = state.playlists.firstOrNull { it.id == selectedPlaylist }
+        if (playlist == null) {
+            Button(onClick = { creating = true },
+                colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = ink)) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Nova playlist")
+            }
+            Spacer(Modifier.height(14.dp))
+            if (state.playlists.isEmpty()) {
+                EmptyLibrary("Cria uma playlist e junta-lhe as tuas músicas.")
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(state.playlists, key = { it.id }) { item ->
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                            .background(card).clickable { selectedPlaylist = item.id }
+                            .padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.QueueMusic, contentDescription = null, tint = accent,
+                                modifier = Modifier.size(32.dp))
+                            Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                                Text(item.name, color = Color.White, fontWeight = FontWeight.Bold)
+                                Text("${item.tracks.size} músicas", color = muted)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = muted)
+                        }
+                    }
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { selectedPlaylist = null }) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(playlist.name, color = Color.White, fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge)
+                    Text("${playlist.tracks.size} músicas", color = muted)
+                }
+                IconButton(onClick = { confirmingDelete = true }) {
+                    Icon(Icons.Default.DeleteOutline, contentDescription = "Apagar playlist", tint = muted)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            if (playlist.tracks.isEmpty()) EmptyLibrary("Adiciona músicas a esta playlist a partir da pesquisa.")
+            else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(playlist.tracks, key = { it.id }) { track ->
+                    TrackRow(track, state.favorites.any { it.id == track.id },
+                        onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) },
+                        onAdd = { onAdd(track) },
+                        onRemove = { vm.removeFromPlaylist(playlist.id, track.id) })
+                }
+            }
+        }
+    } else {
+        val tracks = if (state.librarySection == LibrarySection.FAVORITES)
+            state.favorites else state.history
+        if (tracks.isEmpty()) EmptyLibrary(if (state.librarySection == LibrarySection.FAVORITES)
+            "Guarda músicas com o coração para as encontrares aqui."
+            else "As músicas que ouvires aparecem aqui.")
+        else {
+            Text("${tracks.size} MÚSICAS", style = MaterialTheme.typography.labelMedium, color = muted)
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 20.dp)) {
+                items(tracks, key = { it.id }) { track ->
+                    TrackRow(track, state.favorites.any { it.id == track.id },
+                        onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) },
+                        onAdd = { onAdd(track) })
+                }
+            }
+        }
+    }
+    if (creating) CreatePlaylistDialog(
+        onDismiss = { creating = false },
+        onCreate = { vm.createPlaylist(it); creating = false })
+    if (confirmingDelete) AlertDialog(
+        onDismissRequest = { confirmingDelete = false },
+        title = { Text("Apagar playlist?") },
+        text = { Text("As músicas não são apagadas dos favoritos nem do histórico.") },
+        confirmButton = { TextButton(onClick = {
+            selectedPlaylist?.let(vm::deletePlaylist)
+            selectedPlaylist = null; confirmingDelete = false
+        }) { Text("Apagar") } },
+        dismissButton = { TextButton(onClick = { confirmingDelete = false }) { Text("Cancelar") } })
+}
+
+@Composable
+private fun EmptyLibrary(message: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(message, color = muted)
     }
 }
 
@@ -299,7 +392,9 @@ private fun Artwork(track: AudioTrack, modifier: Modifier = Modifier) {
 
 @Composable
 private fun TrackRow(track: AudioTrack, favorite: Boolean,
-                     onPlay: () -> Unit, onFavorite: () -> Unit) {
+                     onPlay: () -> Unit, onFavorite: () -> Unit,
+                     onAdd: () -> Unit, onRemove: (() -> Unit)? = null) {
+    var menuOpen by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(card)
         .clickable(onClick = onPlay).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         Artwork(track, Modifier.size(58.dp))
@@ -313,6 +408,20 @@ private fun TrackRow(track: AudioTrack, favorite: Boolean,
             Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                 contentDescription = if (favorite) "Remover dos favoritos" else "Adicionar aos favoritos",
                 tint = if (favorite) Color(0xFFFF83AA) else muted)
+        }
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Mais opções", tint = muted)
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(text = { Text("Adicionar à playlist") }, onClick = {
+                    menuOpen = false; onAdd()
+                }, leadingIcon = { Icon(Icons.Default.PlaylistAdd, contentDescription = null) })
+                if (onRemove != null) DropdownMenuItem(
+                    text = { Text("Remover desta playlist") }, onClick = {
+                        menuOpen = false; onRemove()
+                    }, leadingIcon = { Icon(Icons.Default.RemoveCircleOutline, contentDescription = null) })
+            }
         }
     }
 }
@@ -347,7 +456,8 @@ private fun MiniPlayer(track: AudioTrack, state: PlayerState,
 }
 
 @Composable
-private fun PlayerDetails(track: AudioTrack, state: PlayerState, vm: PlayerViewModel) {
+private fun PlayerDetails(track: AudioTrack, state: PlayerState, vm: PlayerViewModel,
+                          onAdd: (AudioTrack) -> Unit) {
     val favorite = state.favorites.any { it.id == track.id }
     val duration = state.playback.durationMs
     var dragging by remember(track.id) { mutableFloatStateOf(-1f) }
@@ -388,8 +498,59 @@ private fun PlayerDetails(track: AudioTrack, state: PlayerState, vm: PlayerViewM
                     contentDescription = if (state.playback.playing) "Pausar" else "Continuar",
                     modifier = Modifier.size(32.dp))
             }
-            Spacer(Modifier.width(80.dp))
+            Spacer(Modifier.width(32.dp))
+            IconButton(onClick = { onAdd(track) }) {
+                Icon(Icons.Default.PlaylistAdd, contentDescription = "Adicionar à playlist", tint = muted)
+            }
         }
+    }
+}
+
+@Composable
+private fun CreatePlaylistDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nova playlist") },
+        text = { OutlinedTextField(value = name, onValueChange = { name = it },
+            label = { Text("Nome") }, singleLine = true) },
+        confirmButton = { TextButton(onClick = { onCreate(name) }, enabled = name.isNotBlank()) {
+            Text("Criar")
+        } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } })
+}
+
+@Composable
+private fun PlaylistPicker(track: AudioTrack, state: PlayerState, vm: PlayerViewModel,
+                           onDismiss: () -> Unit) {
+    var creating by remember { mutableStateOf(false) }
+    if (creating) {
+        CreatePlaylistDialog(onDismiss = onDismiss, onCreate = { name ->
+            vm.createPlaylist(name)
+            val created = vm.state.value.playlists.lastOrNull()
+            if (created != null) vm.addToPlaylist(created.id, track)
+            onDismiss()
+        })
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Adicionar à playlist") },
+            text = {
+                Column {
+                    if (state.playlists.isEmpty()) Text("Ainda não tens playlists.")
+                    state.playlists.forEach { playlist ->
+                        TextButton(onClick = {
+                            vm.addToPlaylist(playlist.id, track); onDismiss()
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text(playlist.name, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { creating = true }) {
+                Text("Nova playlist")
+            } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } })
     }
 }
 

@@ -4,6 +4,9 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import pt.tubeaudio.model.AudioTrack
+import java.util.UUID
+
+data class LocalPlaylist(val id: String, val name: String, val tracks: List<AudioTrack>)
 
 /** Small local library. Resolved stream URLs expire, so they are never persisted. */
 class LibraryStore(context: Context) {
@@ -11,6 +14,48 @@ class LibraryStore(context: Context) {
 
     fun favorites(): List<AudioTrack> = read("favorites")
     fun history(): List<AudioTrack> = read("history")
+    fun playlists(): List<LocalPlaylist> = runCatching {
+        val array = JSONArray(prefs.getString("playlists", "[]"))
+        (0 until array.length()).mapNotNull { index ->
+            runCatching {
+                val item = array.getJSONObject(index)
+                LocalPlaylist(item.getString("id"), item.getString("name"),
+                    readTracks(item.getJSONArray("tracks")))
+            }.getOrNull()
+        }
+    }.getOrDefault(emptyList())
+
+    fun createPlaylist(name: String): List<LocalPlaylist> {
+        val clean = name.trim().take(60)
+        if (clean.isEmpty()) return playlists()
+        val updated = playlists() + LocalPlaylist(UUID.randomUUID().toString(), clean, emptyList())
+        writePlaylists(updated)
+        return updated
+    }
+
+    fun deletePlaylist(id: String): List<LocalPlaylist> {
+        val updated = playlists().filterNot { it.id == id }
+        writePlaylists(updated)
+        return updated
+    }
+
+    fun addToPlaylist(id: String, track: AudioTrack): List<LocalPlaylist> {
+        val updated = playlists().map {
+            if (it.id == id && it.tracks.none { saved -> saved.id == track.id })
+                it.copy(tracks = it.tracks + track) else it
+        }
+        writePlaylists(updated)
+        return updated
+    }
+
+    fun removeFromPlaylist(id: String, trackId: String): List<LocalPlaylist> {
+        val updated = playlists().map {
+            if (it.id == id) it.copy(tracks = it.tracks.filterNot { saved -> saved.id == trackId })
+            else it
+        }
+        writePlaylists(updated)
+        return updated
+    }
 
     fun toggleFavorite(track: AudioTrack): List<AudioTrack> {
         val current = favorites()
@@ -27,7 +72,10 @@ class LibraryStore(context: Context) {
     }
 
     private fun read(key: String): List<AudioTrack> = runCatching {
-        val array = JSONArray(prefs.getString(key, "[]"))
+        readTracks(JSONArray(prefs.getString(key, "[]")))
+    }.getOrDefault(emptyList())
+
+    private fun readTracks(array: JSONArray): List<AudioTrack> =
         (0 until array.length()).mapNotNull { index ->
             runCatching {
                 val o = array.getJSONObject(index)
@@ -39,19 +87,32 @@ class LibraryStore(context: Context) {
                 )
             }.getOrNull()
         }
-    }.getOrDefault(emptyList())
 
     private fun write(key: String, tracks: List<AudioTrack>) {
         val array = JSONArray()
-        tracks.forEach { track ->
+        tracks.forEach { array.put(trackJson(it)) }
+        prefs.edit().putString(key, array.toString()).apply()
+    }
+
+    private fun writePlaylists(playlists: List<LocalPlaylist>) {
+        val array = JSONArray()
+        playlists.forEach { playlist ->
+            val tracks = JSONArray()
+            playlist.tracks.forEach { tracks.put(trackJson(it)) }
             array.put(JSONObject().apply {
-                put("id", track.id)
-                put("title", track.title)
-                put("uploader", track.uploader)
-                put("duration", track.durationSeconds)
-                put("thumbnail", track.thumbnailUrl ?: "")
+                put("id", playlist.id)
+                put("name", playlist.name)
+                put("tracks", tracks)
             })
         }
-        prefs.edit().putString(key, array.toString()).apply()
+        prefs.edit().putString("playlists", array.toString()).apply()
+    }
+
+    private fun trackJson(track: AudioTrack) = JSONObject().apply {
+        put("id", track.id)
+        put("title", track.title)
+        put("uploader", track.uploader)
+        put("duration", track.durationSeconds)
+        put("thumbnail", track.thumbnailUrl ?: "")
     }
 }
