@@ -16,6 +16,7 @@ class PlaybackController(context: Context) {
     data class Status(
         val connected: Boolean = false,
         val playing: Boolean = false,
+        val ended: Boolean = false,
         val durationMs: Long = 0,
         val positionMs: Long = 0
     )
@@ -52,6 +53,7 @@ class PlaybackController(context: Context) {
         _status.value = Status(
             connected = true,
             playing = player.isPlaying,
+            ended = player.playbackState == Player.STATE_ENDED,
             durationMs = player.duration.coerceAtLeast(0),
             positionMs = player.currentPosition.coerceAtLeast(0)
         )

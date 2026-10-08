@@ -12,8 +12,8 @@ android {
         applicationId = "pt.tubeaudio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.9.2"
+        versionCode = 14
+        versionName = "0.9.3"
     }
     buildTypes {
         release {

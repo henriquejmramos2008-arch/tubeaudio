@@ -47,7 +47,7 @@ fun PlayerScreen(vm: PlayerViewModel) {
             Column(Modifier.background(ink)) {
                 state.current?.let { track ->
                     MiniPlayer(track, state, onOpen = { expandedPlayer = true },
-                        onToggle = vm::togglePlayback)
+                        onToggle = vm::togglePlayback, onNext = { vm.next() })
                 }
                 NavigationBar(containerColor = Color(0xFF141A29), contentColor = Color.White) {
                     listOf(
@@ -137,7 +137,8 @@ private fun HomeContent(state: PlayerState, vm: PlayerViewModel, onAdd: (AudioTr
             item { SectionTitle("Ouvir novamente", "As tuas últimas faixas") }
             items(state.history.take(6), key = { "home-${it.id}" }) { track ->
                 TrackRow(track, state.favorites.any { it.id == track.id },
-                    onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) },
+                    onPlay = { vm.play(track, state.history.take(6)) },
+                    onFavorite = { vm.toggleFavorite(track) },
                     onAdd = { onAdd(track) })
             }
         }
@@ -225,7 +226,8 @@ private fun SearchContent(state: PlayerState, vm: PlayerViewModel, onAdd: (Audio
             contentPadding = PaddingValues(bottom = 20.dp)) {
             items(state.results, key = { it.id }) { track ->
                 TrackRow(track, state.favorites.any { it.id == track.id },
-                    onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) },
+                    onPlay = { vm.play(track, state.results) },
+                    onFavorite = { vm.toggleFavorite(track) },
                     onAdd = { onAdd(track) })
             }
         }
@@ -326,11 +328,21 @@ private fun LibraryContent(state: PlayerState, vm: PlayerViewModel, onAdd: (Audi
                 }
             }
             Spacer(Modifier.height(16.dp))
+            if (playlist.tracks.isNotEmpty()) {
+                Button(onClick = { vm.playAll(playlist.tracks) },
+                    colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = ink)) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Reproduzir playlist")
+                }
+                Spacer(Modifier.height(12.dp))
+            }
             if (playlist.tracks.isEmpty()) EmptyLibrary("Adiciona músicas a esta playlist a partir da pesquisa.")
             else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(playlist.tracks, key = { it.id }) { track ->
                     TrackRow(track, state.favorites.any { it.id == track.id },
-                        onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) },
+                        onPlay = { vm.play(track, playlist.tracks) },
+                        onFavorite = { vm.toggleFavorite(track) },
                         onAdd = { onAdd(track) },
                         onRemove = { vm.removeFromPlaylist(playlist.id, track.id) })
                 }
@@ -349,7 +361,8 @@ private fun LibraryContent(state: PlayerState, vm: PlayerViewModel, onAdd: (Audi
                 contentPadding = PaddingValues(bottom = 20.dp)) {
                 items(tracks, key = { it.id }) { track ->
                     TrackRow(track, state.favorites.any { it.id == track.id },
-                        onPlay = { vm.play(track) }, onFavorite = { vm.toggleFavorite(track) },
+                        onPlay = { vm.play(track, tracks) },
+                        onFavorite = { vm.toggleFavorite(track) },
                         onAdd = { onAdd(track) })
                 }
             }
@@ -428,7 +441,7 @@ private fun TrackRow(track: AudioTrack, favorite: Boolean,
 
 @Composable
 private fun MiniPlayer(track: AudioTrack, state: PlayerState,
-                       onOpen: () -> Unit, onToggle: () -> Unit) {
+                       onOpen: () -> Unit, onToggle: () -> Unit, onNext: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
         .clip(RoundedCornerShape(20.dp)).background(Color(0xFF30334F))) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(8.dp),
@@ -444,6 +457,12 @@ private fun MiniPlayer(track: AudioTrack, state: PlayerState,
                 Icon(if (state.playback.playing) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (state.playback.playing) "Pausar" else "Continuar",
                     tint = Color.White)
+            }
+            if (state.queueIndex + 1 < state.queue.size) {
+                IconButton(onClick = onNext) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Faixa seguinte",
+                        tint = Color.White)
+                }
             }
         }
         val duration = state.playback.durationMs
@@ -484,13 +503,20 @@ private fun PlayerDetails(track: AudioTrack, state: PlayerState, vm: PlayerViewM
             Text(formatTime(duration), color = muted)
         }
         Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { vm.toggleFavorite(track) }) {
-                Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = if (favorite) "Remover dos favoritos" else "Adicionar aos favoritos",
-                    tint = if (favorite) Color(0xFFFF83AA) else muted)
+        if (state.queue.size > 1) {
+            Text("FAIXA ${state.queueIndex + 1} DE ${state.queue.size}",
+                color = muted, style = MaterialTheme.typography.labelMedium)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = vm::toggleShuffle) {
+                Icon(Icons.Default.Shuffle, contentDescription = "Aleatório",
+                    tint = if (state.shuffle) mint else muted)
             }
-            Spacer(Modifier.width(32.dp))
+            IconButton(onClick = vm::previous) {
+                Icon(Icons.Default.SkipPrevious, contentDescription = "Faixa anterior", tint = Color.White)
+            }
             FilledIconButton(onClick = vm::togglePlayback, modifier = Modifier.size(68.dp),
                 colors = IconButtonDefaults.filledIconButtonColors(
                     containerColor = accent, contentColor = ink)) {
@@ -498,7 +524,22 @@ private fun PlayerDetails(track: AudioTrack, state: PlayerState, vm: PlayerViewM
                     contentDescription = if (state.playback.playing) "Pausar" else "Continuar",
                     modifier = Modifier.size(32.dp))
             }
-            Spacer(Modifier.width(32.dp))
+            IconButton(onClick = { vm.next() }) {
+                Icon(Icons.Default.SkipNext, contentDescription = "Faixa seguinte", tint = Color.White)
+            }
+            IconButton(onClick = vm::toggleRepeatOne) {
+                Icon(Icons.Default.RepeatOne, contentDescription = "Repetir faixa",
+                    tint = if (state.repeatOne) mint else muted)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { vm.toggleFavorite(track) }) {
+                Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (favorite) "Remover dos favoritos" else "Adicionar aos favoritos",
+                    tint = if (favorite) Color(0xFFFF83AA) else muted)
+            }
+            Spacer(Modifier.width(24.dp))
             IconButton(onClick = { onAdd(track) }) {
                 Icon(Icons.Default.PlaylistAdd, contentDescription = "Adicionar à playlist", tint = muted)
             }

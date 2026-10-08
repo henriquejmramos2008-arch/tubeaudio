@@ -30,8 +30,9 @@ mesmo identificador e uma assinatura diferente, é preciso desinstalá-la antes
 - MediaSessionService e MediaController para reprodução em segundo plano.
 - Favoritos, playlists e 100 faixas recentes no armazenamento local.
 - Início com acesso rápido, pesquisa, biblioteca, miniplayer e player com posição.
+- Fila a partir dos resultados e das playlists, próximo/anterior, aleatório e repetir uma faixa.
 - Erros de pesquisa com repetição e detalhes técnicos para diagnóstico.
-- Downloads offline, OAuth e reprodução sequencial de playlists ainda por reconstruir.
+- Downloads offline e OAuth ainda por reconstruir.
 
 A disponibilidade do áudio depende do extrator e da origem. O fluxo real de
 reprodução e os controlos por Bluetooth precisam de validação num dispositivo.

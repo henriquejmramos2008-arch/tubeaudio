@@ -27,6 +27,10 @@ data class PlayerState(
     val favorites: List<AudioTrack> = emptyList(),
     val history: List<AudioTrack> = emptyList(),
     val playlists: List<LocalPlaylist> = emptyList(),
+    val queue: List<AudioTrack> = emptyList(),
+    val queueIndex: Int = -1,
+    val shuffle: Boolean = false,
+    val repeatOne: Boolean = false,
     val current: AudioTrack? = null,
     val tab: LibraryTab = LibraryTab.HOME,
     val librarySection: LibrarySection = LibrarySection.FAVORITES,
@@ -49,7 +53,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         viewModelScope.launch {
-            playback.status.collect { _state.value = _state.value.copy(playback = it) }
+            var handledEnd = false
+            playback.status.collect { status ->
+                _state.value = _state.value.copy(playback = status)
+                if (status.ended && !handledEnd) {
+                    handledEnd = true
+                    next(fromCompletion = true)
+                }
+                if (!status.ended) handledEnd = false
+            }
         }
         viewModelScope.launch {
             while (isActive) {
@@ -88,7 +100,50 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun play(track: AudioTrack) {
+    fun play(track: AudioTrack, tracks: List<AudioTrack> = listOf(track)) {
+        val queue = tracks.distinctBy { it.id }.ifEmpty { listOf(track) }
+        _state.value = _state.value.copy(queue = queue,
+            queueIndex = queue.indexOfFirst { it.id == track.id }.coerceAtLeast(0))
+        resolveAndPlay(track)
+    }
+
+    fun playAll(tracks: List<AudioTrack>) {
+        tracks.firstOrNull()?.let { play(it, tracks) }
+    }
+
+    fun next(fromCompletion: Boolean = false) {
+        val s = state.value
+        if (s.queue.isEmpty()) return
+        val nextIndex = when {
+            fromCompletion && s.repeatOne -> s.queueIndex
+            s.shuffle && s.queue.size > 1 ->
+                s.queue.indices.filter { it != s.queueIndex }.random()
+            s.queueIndex + 1 < s.queue.size -> s.queueIndex + 1
+            else -> return
+        }
+        _state.value = _state.value.copy(queueIndex = nextIndex)
+        resolveAndPlay(s.queue[nextIndex])
+    }
+
+    fun previous() {
+        val s = state.value
+        if (s.queueIndex <= 0) {
+            seekTo(0)
+            return
+        }
+        val previousIndex = s.queueIndex - 1
+        _state.value = s.copy(queueIndex = previousIndex)
+        resolveAndPlay(s.queue[previousIndex])
+    }
+
+    fun toggleShuffle() {
+        _state.value = _state.value.copy(shuffle = !_state.value.shuffle)
+    }
+    fun toggleRepeatOne() {
+        _state.value = _state.value.copy(repeatOne = !_state.value.repeatOne)
+    }
+
+    private fun resolveAndPlay(track: AudioTrack) {
         playJob?.cancel()
         playJob = viewModelScope.launch {
             _state.value = _state.value.copy(resolving = true, error = null, errorDetails = null)
