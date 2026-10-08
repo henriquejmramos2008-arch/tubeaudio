@@ -9,8 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
     permissions:
       contents: read
     steps:
@@ -19,7 +17,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - run: "$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0"
+      - run: /usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager "platforms;android-37" "build-tools;36.0.0"
+      - run: echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
