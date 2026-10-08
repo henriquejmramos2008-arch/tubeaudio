@@ -69,7 +69,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             work.getWorkInfosByTagFlow(DownloadWorker.TAG).collect { jobs ->
                 val pending = jobs.filter { !it.state.isFinished }
-                    .mapNotNull { it.inputData.getString("id") }.toSet()
+                    .mapNotNull { job -> job.tags.firstOrNull { it.startsWith("track:") }
+                        ?.removePrefix("track:") }.toSet()
                 val failure = jobs.lastOrNull { it.state == WorkInfo.State.FAILED }
                     ?.outputData?.getString("error")
                 _state.value = _state.value.copy(downloads = offline.downloads(),
@@ -209,7 +210,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 "uploader" to track.uploader, "duration" to track.durationSeconds,
                 "thumbnail" to track.thumbnailUrl))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .addTag(DownloadWorker.TAG).build()
+            .addTag(DownloadWorker.TAG).addTag("track:${track.id}").build()
         work.enqueueUniqueWork("audio-${OfflineStore.key(track.id)}", ExistingWorkPolicy.KEEP, request)
     }
     fun removeDownload(track: AudioTrack) {

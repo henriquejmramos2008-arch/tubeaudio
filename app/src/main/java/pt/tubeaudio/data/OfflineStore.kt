@@ -31,7 +31,7 @@ class OfflineStore(context: Context) {
         File(directory, "${key(id)}.$extension")
 
     fun save(track: AudioTrack, file: File) = synchronized(lock) {
-        val items = entries().filterNot { it.optString("id") == track.id }
+        val items = entries().filterNot { it.optString("id") == track.id }.toMutableList()
         items.add(0, JSONObject().apply {
             put("id", track.id); put("title", track.title); put("uploader", track.uploader)
             put("duration", track.durationSeconds); put("thumbnail", track.thumbnailUrl ?: "")
