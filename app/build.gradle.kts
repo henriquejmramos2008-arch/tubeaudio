@@ -12,8 +12,8 @@ android {
         applicationId = "pt.tubeaudio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "0.9.4"
+        versionCode = 16
+        versionName = "0.9.5"
     }
     buildTypes {
         release {
@@ -45,6 +45,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.media3:media3-exoplayer:1.8.0")
     implementation("androidx.media3:media3-session:1.8.0")
+    implementation("androidx.work:work-runtime-ktx:2.11.0")
     implementation("com.github.TeamNewPipe:NewPipeExtractor:$newpipeExtractorVersion")
     implementation("com.squareup.okhttp3:okhttp:5.1.0")
     implementation("io.coil-kt.coil3:coil-compose:3.3.0")

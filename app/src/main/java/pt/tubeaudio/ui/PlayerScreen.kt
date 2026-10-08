@@ -139,7 +139,10 @@ private fun HomeContent(state: PlayerState, vm: PlayerViewModel, onAdd: (AudioTr
                 TrackRow(track, state.favorites.any { it.id == track.id },
                     onPlay = { vm.play(track, state.history.take(6)) },
                     onFavorite = { vm.toggleFavorite(track) },
-                    onAdd = { onAdd(track) })
+                    onAdd = { onAdd(track) }, onDownload = { vm.download(track) },
+                    onDeleteDownload = { vm.removeDownload(track) },
+                    downloaded = state.downloads.any { it.id == track.id },
+                    downloading = track.id in state.downloadingIds)
             }
         }
         item {
@@ -228,7 +231,10 @@ private fun SearchContent(state: PlayerState, vm: PlayerViewModel, onAdd: (Audio
                 TrackRow(track, state.favorites.any { it.id == track.id },
                     onPlay = { vm.play(track, state.results) },
                     onFavorite = { vm.toggleFavorite(track) },
-                    onAdd = { onAdd(track) })
+                    onAdd = { onAdd(track) }, onDownload = { vm.download(track) },
+                    onDeleteDownload = { vm.removeDownload(track) },
+                    downloaded = state.downloads.any { it.id == track.id },
+                    downloading = track.id in state.downloadingIds)
             }
         }
     }
@@ -269,22 +275,38 @@ private fun LibraryContent(state: PlayerState, vm: PlayerViewModel, onAdd: (Audi
     }
     Header("Biblioteca", "Músicas e coleções guardadas no telemóvel.")
     if (selectedPlaylist == null) {
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        ScrollableTabRow(selectedTabIndex = LibrarySection.entries.indexOf(state.librarySection),
+            containerColor = ink, contentColor = accent, edgePadding = 0.dp) {
             LibrarySection.entries.forEachIndexed { index, section ->
-                SegmentedButton(
+                Tab(
                     selected = state.librarySection == section,
                     onClick = { vm.selectLibrary(section) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = 3),
-                    label = { Text(when (section) {
+                    text = { Text(when (section) {
                         LibrarySection.PLAYLISTS -> "Playlists"
                         LibrarySection.FAVORITES -> "Favoritos"
                         LibrarySection.HISTORY -> "Recentes"
+                        LibrarySection.DOWNLOADS -> "Offline"
                     }) })
             }
         }
         Spacer(Modifier.height(20.dp))
     }
-    if (state.librarySection == LibrarySection.PLAYLISTS) {
+    if (state.librarySection == LibrarySection.DOWNLOADS) {
+        if (state.downloadingIds.isNotEmpty()) Text(
+            "${state.downloadingIds.size} download(s) em curso. Podes sair da app.", color = mint)
+        state.downloadError?.let { Text("Falha no download: $it", color = Color(0xFFFFAFAF)) }
+        Spacer(Modifier.height(12.dp))
+        if (state.downloads.isEmpty()) EmptyLibrary("Descarrega músicas pelo menu ⋮ para ouvir offline.")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(state.downloads, key = { it.id }) { track ->
+                TrackRow(track, state.favorites.any { it.id == track.id },
+                    onPlay = { vm.play(track, state.downloads) },
+                    onFavorite = { vm.toggleFavorite(track) },
+                    onAdd = { onAdd(track) }, onDownload = { vm.download(track) },
+                    onDeleteDownload = { vm.removeDownload(track) }, downloaded = true)
+            }
+        }
+    } else if (state.librarySection == LibrarySection.PLAYLISTS) {
         val playlist = state.playlists.firstOrNull { it.id == selectedPlaylist }
         if (playlist == null) {
             Button(onClick = { creating = true },
@@ -344,7 +366,11 @@ private fun LibraryContent(state: PlayerState, vm: PlayerViewModel, onAdd: (Audi
                         onPlay = { vm.play(track, playlist.tracks) },
                         onFavorite = { vm.toggleFavorite(track) },
                         onAdd = { onAdd(track) },
-                        onRemove = { vm.removeFromPlaylist(playlist.id, track.id) })
+                        onRemove = { vm.removeFromPlaylist(playlist.id, track.id) },
+                        onDownload = { vm.download(track) },
+                        onDeleteDownload = { vm.removeDownload(track) },
+                        downloaded = state.downloads.any { it.id == track.id },
+                        downloading = track.id in state.downloadingIds)
                 }
             }
         }
@@ -363,7 +389,10 @@ private fun LibraryContent(state: PlayerState, vm: PlayerViewModel, onAdd: (Audi
                     TrackRow(track, state.favorites.any { it.id == track.id },
                         onPlay = { vm.play(track, tracks) },
                         onFavorite = { vm.toggleFavorite(track) },
-                        onAdd = { onAdd(track) })
+                        onAdd = { onAdd(track) }, onDownload = { vm.download(track) },
+                        onDeleteDownload = { vm.removeDownload(track) },
+                        downloaded = state.downloads.any { it.id == track.id },
+                        downloading = track.id in state.downloadingIds)
                 }
             }
         }
@@ -406,7 +435,9 @@ private fun Artwork(track: AudioTrack, modifier: Modifier = Modifier) {
 @Composable
 private fun TrackRow(track: AudioTrack, favorite: Boolean,
                      onPlay: () -> Unit, onFavorite: () -> Unit,
-                     onAdd: () -> Unit, onRemove: (() -> Unit)? = null) {
+                     onAdd: () -> Unit, onDownload: () -> Unit,
+                     onDeleteDownload: () -> Unit, downloaded: Boolean,
+                     downloading: Boolean = false, onRemove: (() -> Unit)? = null) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(card)
         .clickable(onClick = onPlay).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -416,6 +447,8 @@ private fun TrackRow(track: AudioTrack, favorite: Boolean,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(track.uploader, color = muted, style = MaterialTheme.typography.bodySmall,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (downloaded || downloading) Text(if (downloaded) "OFFLINE" else "A DESCARREGAR",
+                color = mint, style = MaterialTheme.typography.labelSmall)
         }
         IconButton(onClick = onFavorite) {
             Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -430,6 +463,12 @@ private fun TrackRow(track: AudioTrack, favorite: Boolean,
                 DropdownMenuItem(text = { Text("Adicionar à playlist") }, onClick = {
                     menuOpen = false; onAdd()
                 }, leadingIcon = { Icon(Icons.Default.PlaylistAdd, contentDescription = null) })
+                if (downloaded) DropdownMenuItem(text = { Text("Apagar download") }, onClick = {
+                    menuOpen = false; onDeleteDownload()
+                }, leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null) })
+                else if (!downloading) DropdownMenuItem(text = { Text("Descarregar para offline") },
+                    onClick = { menuOpen = false; onDownload() },
+                    leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) })
                 if (onRemove != null) DropdownMenuItem(
                     text = { Text("Remover desta playlist") }, onClick = {
                         menuOpen = false; onRemove()
@@ -542,6 +581,14 @@ private fun PlayerDetails(track: AudioTrack, state: PlayerState, vm: PlayerViewM
             Spacer(Modifier.width(24.dp))
             IconButton(onClick = { onAdd(track) }) {
                 Icon(Icons.Default.PlaylistAdd, contentDescription = "Adicionar à playlist", tint = muted)
+            }
+            Spacer(Modifier.width(24.dp))
+            val downloaded = state.downloads.any { it.id == track.id }
+            IconButton(onClick = { if (!downloaded) vm.download(track) },
+                enabled = !downloaded && track.id !in state.downloadingIds) {
+                Icon(if (downloaded) Icons.Default.DownloadDone else Icons.Default.Download,
+                    contentDescription = if (downloaded) "Disponível offline" else "Descarregar",
+                    tint = if (downloaded) mint else muted)
             }
         }
     }

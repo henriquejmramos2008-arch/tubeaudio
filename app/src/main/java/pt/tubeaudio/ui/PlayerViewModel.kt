@@ -4,6 +4,13 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,12 +19,14 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import pt.tubeaudio.data.LibraryStore
 import pt.tubeaudio.data.LocalPlaylist
+import pt.tubeaudio.data.DownloadWorker
+import pt.tubeaudio.data.OfflineStore
 import pt.tubeaudio.data.YoutubeRepository
 import pt.tubeaudio.model.AudioTrack
 import pt.tubeaudio.playback.PlaybackController
 
 enum class LibraryTab { HOME, SEARCH, LIBRARY }
-enum class LibrarySection { PLAYLISTS, FAVORITES, HISTORY }
+enum class LibrarySection { PLAYLISTS, FAVORITES, HISTORY, DOWNLOADS }
 
 data class PlayerState(
     val query: String = "",
@@ -27,6 +36,9 @@ data class PlayerState(
     val favorites: List<AudioTrack> = emptyList(),
     val history: List<AudioTrack> = emptyList(),
     val playlists: List<LocalPlaylist> = emptyList(),
+    val downloads: List<AudioTrack> = emptyList(),
+    val downloadingIds: Set<String> = emptySet(),
+    val downloadError: String? = null,
     val queue: List<AudioTrack> = emptyList(),
     val queueIndex: Int = -1,
     val shuffle: Boolean = false,
@@ -42,16 +54,28 @@ data class PlayerState(
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
     private val repo = YoutubeRepository()
     private val library = LibraryStore(application)
+    private val offline = OfflineStore(application)
+    private val work = WorkManager.getInstance(application)
     private val playback = PlaybackController(application)
     private val _state = MutableStateFlow(
         PlayerState(favorites = library.favorites(), history = library.history(),
-            playlists = library.playlists())
+            playlists = library.playlists(), downloads = offline.downloads())
     )
     val state = _state.asStateFlow()
     private var searchJob: Job? = null
     private var playJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            work.getWorkInfosByTagFlow(DownloadWorker.TAG).collect { jobs ->
+                val pending = jobs.filter { !it.state.isFinished }
+                    .mapNotNull { it.inputData.getString("id") }.toSet()
+                val failure = jobs.lastOrNull { it.state == WorkInfo.State.FAILED }
+                    ?.outputData?.getString("error")
+                _state.value = _state.value.copy(downloads = offline.downloads(),
+                    downloadingIds = pending, downloadError = failure)
+            }
+        }
         viewModelScope.launch {
             var handledEnd = false
             playback.status.collect { status ->
@@ -147,7 +171,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         playJob?.cancel()
         playJob = viewModelScope.launch {
             _state.value = _state.value.copy(resolving = true, error = null, errorDetails = null)
-            val result = repo.resolveAudio(track)
+            val result = offline.find(track.id)?.let { Result.success(it) } ?: repo.resolveAudio(track)
             if (!isActive) return@launch
             result.onSuccess { resolved ->
                 playback.play(resolved)
@@ -177,6 +201,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun removeFromPlaylist(id: String, trackId: String) {
         _state.value = _state.value.copy(playlists = library.removeFromPlaylist(id, trackId))
+    }
+    fun download(track: AudioTrack) {
+        if (offline.find(track.id) != null) return
+        val request = OneTimeWorkRequestBuilder<DownloadWorker>()
+            .setInputData(workDataOf("id" to track.id, "title" to track.title,
+                "uploader" to track.uploader, "duration" to track.durationSeconds,
+                "thumbnail" to track.thumbnailUrl))
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .addTag(DownloadWorker.TAG).build()
+        work.enqueueUniqueWork("audio-${OfflineStore.key(track.id)}", ExistingWorkPolicy.KEEP, request)
+    }
+    fun removeDownload(track: AudioTrack) {
+        work.cancelUniqueWork("audio-${OfflineStore.key(track.id)}")
+        _state.value = _state.value.copy(downloads = offline.remove(track.id))
     }
     fun togglePlayback() = playback.toggle()
     fun seekTo(positionMs: Long) = playback.seekTo(positionMs)
