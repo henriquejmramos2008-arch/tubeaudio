@@ -1,5 +1,3 @@
-import java.net.URI
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -52,25 +50,3 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
-tasks.register("checkNewPipeUpdate") {
-    group = "maintenance"
-    doLast {
-        val current = newpipeExtractorVersion
-        val text = URI("https://api.github.com/repos/TeamNewPipe/NewPipeExtractor/releases/latest")
-            .toURL().openConnection().apply {
-                setRequestProperty("Accept", "application/vnd.github+json")
-                setRequestProperty("User-Agent", "TubeAudio")
-                connectTimeout = 5000
-                readTimeout = 5000
-            }.getInputStream().bufferedReader().use { it.readText() }
-        val latest = Regex(""tag_name"\s*:\s*"v([^"]+)"").find(text)?.groupValues?.get(1)
-            ?: error("Could not read latest release")
-        println("NewPipeExtractor current=$current latest=$latest")
-        if (latest != current && providers.gradleProperty("apply").orNull == "true") {
-            val f = rootProject.file("gradle.properties")
-            f.writeText(f.readText().replace(Regex("(?m)^newpipeExtractorVersion=.*$"),
-                "newpipeExtractorVersion=$latest"))
-            println("Updated NewPipeExtractor to $latest")
-        }
-    }
-}
